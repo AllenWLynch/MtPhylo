@@ -76,7 +76,8 @@ class TreeSearchNNI:
         nnis_applied = 0
         for (edge_key, switch), (delta_ll, blacklist_edges) in nni_searchresults:
             
-            if np.exp(delta_ll*iter*tau) > np.random.rand() and len( modified_edges.intersection(blacklist_edges) )==0:
+            #*iter*tau > np.log(np.random.rand())
+            if delta_ll > 0 and len( modified_edges.intersection(blacklist_edges) )==0:
                 
                 if delta_ll < 0:
                     logger.debug(f' Applying NNI with negative log-likelihood change: {delta_ll:.3f}')

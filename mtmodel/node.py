@@ -3,7 +3,7 @@ import numpy as np
 from scipy.optimize import minimize, Bounds
 import warnings
 import logging
-from scipy.special import logsumexp
+from numba import njit
 logger = logging.getLogger('BranchlenOptimizer')
 
 
@@ -22,38 +22,14 @@ def log_safe_vecmul(V, log_A):
     return np.nan_to_num(np.log(V @ np.exp(log_A - alpha)) + alpha, nan=-np.inf)
 
 
-'''@njit(float64[:,:](float64[:,:], float64[:,:]))
+@njit('float64[:,:](float64[:,:], float64[:,:])', cache=True)
 def log_safe_matmul(T, log_A):
-
-    alpha = np.full((1, log_A.shape[1]), -np.inf)
-    for j in range(log_A.shape[1]):
-        for i in range(log_A.shape[0]):
-            alpha[0,j] = max(alpha[0,j], log_A[i,j])
-
-    R = np.zeros_like(log_A)
-    for i in range(log_A.shape[0]):
-        for j in range(log_A.shape[1]):
-            for k in range(T.shape[0]):
-                R[i,j] += T[i, k] * np.exp(log_A[k, j] - alpha[0,j])
+    alpha = np.max(log_A)
+    return np.nan_to_num(
+        np.log(T @ np.exp(log_A - alpha)) + alpha,
+        nan=-np.inf
+    )
     
-    return np.log(R) + alpha
-
-
-@njit
-def log_safe_vecmul(V, log_A):
-
-    alpha = np.full(log_A.shape[1], -np.inf)
-    for j in range(log_A.shape[1]):
-        for i in range(log_A.shape[0]):
-            alpha[j] = max(alpha[j], log_A[i,j])
-
-    R = np.zeros(log_A.shape[1])
-    for j in range(log_A.shape[1]):
-        for k in range(V.shape[0]):
-            R[j] += V[k] * np.exp(log_A[k, j] - alpha[j])
-    
-    return np.log(R) + alpha'''
-
 
 class Node:
     def __repr__(self) -> str:
@@ -115,7 +91,6 @@ class InternalNode(Node):
         B = ancestor.B_ # (N_states, N_sites)
         T = self.T_ # (N_states, N_states)
 
-        #self.B_[...] = T.T @ (A*B)
         self.B_[...] = log_safe_matmul(T.T, A + B) # (N_states, N_sites)
 
 
