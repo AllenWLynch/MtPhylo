@@ -7,20 +7,20 @@ from .binarytree import BinaryTree
 
 @jit
 def logsafe_matmul(A, logB):
-    eps = jnp.max(logB)
+    eps = jnp.max(logB, axis=0, keepdims=True)
     logmat = jnp.nan_to_num(jnp.log(A @ jnp.exp(logB - eps)) + eps, nan=-jnp.inf)
     return logmat
 
 
 @jit
 def exp_logsafe_matmul(A, logB):
-    eps = jnp.max(logB)
+    eps = jnp.max(logB, axis=0, keepdims=True)
     return A @ jnp.exp(logB - eps) * jnp.exp(eps)
 
 
 @jit
 def logsumexp_down(A):
-    eps = jnp.max(A)
+    eps = jnp.max(A, axis=0, keepdims=True)
     return jnp.log(jnp.sum(jnp.exp(A - eps), axis=0)) + eps
 
 
@@ -110,7 +110,7 @@ def _init_tensors(
     # parallelize the first backward step for all leave nodes
     A = jnp.empty((n_nodes, n_states, n_sites))\
             .at[leaf_node_idxs, :, :].set(
-                logsafe_matmul(T[leaf_node_idxs, :, :], L[leaf_node_idxs, : , :])
+                vmap(logsafe_matmul)(T[leaf_node_idxs, :, :], L[leaf_node_idxs, : , :])
             )
     
     return L_rev, L, A, B
@@ -119,14 +119,14 @@ def _init_tensors(
 @jit
 def backward_pass(curr_idx, left_idx, right_idx,*, T, A, L):
     L=L.at[curr_idx, :, :].set(A[left_idx, :, :] + A[right_idx,:,:])
-    A=A.at[curr_idx, :, :].set(logsafe_matmul(T[curr_idx,:,:], L[curr_idx,:,:]))
+    A=A.at[curr_idx, :, :].set(vmap(logsafe_matmul)(T[curr_idx,:,:], L[curr_idx,:,:]))
     return L, A
 
 
 @jit
 def forward_pass(curr_idx, ancestor_idx, sibling_idx,*, T, B, A, L_rev):
     L_rev=L_rev.at[curr_idx, :, :].set(B[ancestor_idx, :, :] + A[sibling_idx, :, :])
-    B=B.at[curr_idx, :, :].set(logsafe_matmul( jnp.matrix_transpose(T[curr_idx, :, :]), L_rev[curr_idx, :, :]))
+    B=B.at[curr_idx, :, :].set(vmap(logsafe_matmul)( jnp.matrix_transpose(T[curr_idx, :, :]), L_rev[curr_idx, :, :]))
     return B, L_rev
 
 
@@ -160,7 +160,7 @@ def get_gradient_suffstat_fn(
     idx_map = {node.id : i for i, node in enumerate(nodes)}
     root_idx=idx_map[tree.id]
     leaf_nodes=[node for node in nodes if node.is_leaf]
-    leaf_nodes_idxs = [idx_map[node.id] for node in leaf_nodes]
+    leaf_nodes_idxs = tuple([idx_map[node.id] for node in leaf_nodes])
 
     logp_obs_arr=jnp.array([logp_obs_dict[node.id] for node in leaf_nodes])
 
@@ -191,7 +191,6 @@ def get_gradient_suffstat_fn(
             )))
         )
 
-
     def get_grad_suffstats(branchlen_vector):
 
         # calculate the transition matrix for each branch
@@ -203,7 +202,7 @@ def get_gradient_suffstat_fn(
             *tensor_shape,
             logp_initial_state=logp_initial_state,
             root_idx=root_idx,
-            leaf_node_idxs=tuple(leaf_nodes_idxs),
+            leaf_node_idxs=leaf_nodes_idxs,
             logp_obs_arr=logp_obs_arr,
             T=T,
         )

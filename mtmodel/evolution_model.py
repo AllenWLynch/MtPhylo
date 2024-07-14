@@ -233,18 +233,22 @@ class VirtualPopulationModel(EvolutionModel):
         assert res.success
 
         return res.x
-
-
+    
     @staticmethod
-    def _get_diffusion_functions(Q):
-        
+    def get_eigenvector_system(Q):
         _, vecs = np.linalg.eig(Q)
         D = np.linalg.inv(vecs) @ Q @ vecs
         assert np.allclose(D * (1-np.eye(D.shape[0])), 0)
         inv_vecs=np.linalg.inv(vecs)
         D=np.diag(D)[np.newaxis,:]
-
         vecs=vecs.astype(float); inv_vecs=inv_vecs.astype(float); D=D.astype(float)
+
+        return vecs, D, inv_vecs
+
+
+    def _get_diffusion_functions(self, Q):
+        
+        vecs, D, inv_vecs = self.get_eigenvector_system(Q)
 
         @njit('float64[:,:](float64)')
         def diffuse(t):
