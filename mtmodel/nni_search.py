@@ -6,6 +6,17 @@ import jax.numpy as jnp
 from scipy.optimize import minimize, Bounds
 from numpy import array, inf
 import warnings
+from contextlib import contextmanager
+from time import perf_counter
+from logging import getLogger
+logger = getLogger('MtPhylo')
+
+
+@contextmanager
+def TimerContext(message, logfn=logger.debug):
+    start = perf_counter()
+    yield lambda : perf_counter() - start
+    logfn('{}, elapsed time: {:.3f} seconds'.format(message, perf_counter()-start))
 
 
 def generate_nnis(root_node):
@@ -207,26 +218,28 @@ def nni_hill_climb_step(
                 logp_initial_state=logp_initial_state,
             )
 
-    ll, bl = _optimize_branchlens(
-                root_node=root_node,
-                dT_transition_matrix=dT_transition_matrix,
-                site_weights=site_weights,
-                gradient_suffstats_fn=suffstats_fn,
-                **pass_to_optimizers,
-            )
+    with TimerContext("Optimizing branch lengths", logger.info):
+        ll, bl = _optimize_branchlens(
+                    root_node=root_node,
+                    dT_transition_matrix=dT_transition_matrix,
+                    site_weights=site_weights,
+                    gradient_suffstats_fn=suffstats_fn,
+                    **pass_to_optimizers,
+                )
 
-    nni_puzzles=generate_nni_optimizations(
-                root_node=root_node,
-                transition_matrix=transition_matrix,
-                dT_transition_matrix=dT_transition_matrix,
-                gradient_suffstats=suffstats_fn(bl),
-                site_weights=site_weights,
-            )
+    with TimerContext("Testing NNIs", logger.info):
+        nni_puzzles=generate_nni_optimizations(
+                    root_node=root_node,
+                    transition_matrix=transition_matrix,
+                    dT_transition_matrix=dT_transition_matrix,
+                    gradient_suffstats=suffstats_fn(bl),
+                    site_weights=site_weights,
+                )
 
-    nnis_ranked=rank_nnis(
-                nni_puzzles,
-                **pass_to_optimizers,
-            )
+        nnis_ranked=rank_nnis(
+                    nni_puzzles,
+                    **pass_to_optimizers,
+                )
     
     applied_nnis=_apply_nnis(
                 nnis_ranked,
