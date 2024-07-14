@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from scipy.optimize import linprog
 import numpy as np
+from numba import njit
 
 def log_safe_matmul(A, logB):
     eps = np.max(logB)
