@@ -1,8 +1,11 @@
 from abc import ABC, abstractmethod
 from scipy.optimize import linprog
 import numpy as np
-from .node import log_safe_matmul
 
+def log_safe_matmul(A, logB):
+    eps = np.max(logB)
+    logmat = np.nan_to_num(np.log(A @ np.exp(logB - eps)) + eps, nan=-np.inf)
+    return logmat
 
 class EvolutionModel(ABC):
     
@@ -229,6 +232,22 @@ class VirtualPopulationModel(EvolutionModel):
         assert res.success
 
         return res.x
+    
+
+    @staticmethod
+    def get_eigenvector_system(Q):
+
+        _, vecs = np.linalg.eig(Q)
+        D = np.linalg.inv(vecs) @ Q @ vecs
+        assert np.allclose(D * (1-np.eye(D.shape[0])), 0)
+        inv_vecs=np.linalg.inv(vecs)
+        D=np.diag(D)[np.newaxis,:]
+
+        vecs=np.real(vecs)
+        inv_vecs=np.real(inv_vecs)
+        D=np.real(D)
+    
+        return vecs, D, inv_vecs
 
 
     @staticmethod
