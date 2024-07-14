@@ -78,14 +78,17 @@ class JCNucModel(EvolutionModel):
         return self.site_weight_vector_
 
     @staticmethod
+    @njit('float64[:,:](float64)')
     def transition_matrix(v):
         return (-1/4*np.ones((4,4)) + np.eye(4))*np.exp(-v) + 1/4
 
     @staticmethod
+    @njit('float64[:,:](float64)')
     def ddt_transition_matrix(v):
         return -np.exp(-v)*(-1/4*np.ones((4,4)) + np.eye(4))
     
     @staticmethod
+    @njit('float64[:,:](float64)')
     def dddt_transition_matrix(v):
         return np.exp(-v)*(-1/4*np.ones((4,4)) + np.eye(4))
     
@@ -233,43 +236,36 @@ class VirtualPopulationModel(EvolutionModel):
 
         return res.x
     
-
     @staticmethod
     def get_eigenvector_system(Q):
-
         _, vecs = np.linalg.eig(Q)
         D = np.linalg.inv(vecs) @ Q @ vecs
         assert np.allclose(D * (1-np.eye(D.shape[0])), 0)
         inv_vecs=np.linalg.inv(vecs)
         D=np.diag(D)[np.newaxis,:]
+        vecs=vecs.astype(float); inv_vecs=inv_vecs.astype(float); D=D.astype(float)
 
-        vecs=np.real(vecs)
-        inv_vecs=np.real(inv_vecs)
-        D=np.real(D)
-    
         return vecs, D, inv_vecs
 
 
-    @staticmethod
-    def _get_diffusion_functions(Q):
+    def _get_diffusion_functions(self, Q):
         
-        _, vecs = np.linalg.eig(Q)
-        D = np.linalg.inv(vecs) @ Q @ vecs
-        assert np.allclose(D * (1-np.eye(D.shape[0])), 0)
-        inv_vecs=np.linalg.inv(vecs)
-        D=np.diag(D)[np.newaxis,:]
+        vecs, D, inv_vecs = self.get_eigenvector_system(Q)
 
+        @njit('float64[:,:](float64)')
         def diffuse(t):
-            return ( (vecs * np.exp(D*t)) @ inv_vecs ).astype(float)
+            return ( (vecs * np.exp(D*t)) @ inv_vecs )
         
+        @njit('float64[:,:](float64)')
         def ddt_diffuse(t):
             return (
                 (vecs * D * np.exp(D*t)) @ inv_vecs
-            ).astype(float)
+            )
         
+        @njit('float64[:,:](float64)')
         def dddt_diffuse(t):
             return (
                 (vecs * D**2 * np.exp(D*t)) @ inv_vecs
-            ).astype(float)
+            )
         
         return diffuse, ddt_diffuse, dddt_diffuse
